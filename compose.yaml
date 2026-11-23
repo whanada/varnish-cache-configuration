@@ -1,0 +1,31 @@
+services:
+  site-01:
+    build: ./lab
+    environment: {ORIGIN_NAME: site-01, ORIGIN_TYPE: site, PORT: "8080"}
+  site-02:
+    build: ./lab
+    environment: {ORIGIN_NAME: site-02, ORIGIN_TYPE: site, PORT: "8081"}
+  api-01:
+    build: ./lab
+    environment: {ORIGIN_NAME: api-01, ORIGIN_TYPE: api, PORT: "8082"}
+  images-01:
+    build: ./lab
+    environment: {ORIGIN_NAME: images-01, ORIGIN_TYPE: images, PORT: "8083"}
+  varnish:
+    image: varnish:7.7.3
+    ports:
+      - "127.0.0.1:6081:80"
+    volumes:
+      - ./merged.vcl:/etc/varnish/default.vcl:ro
+    depends_on: [site-01, site-02, api-01, images-01]
+    networks:
+      default:
+        aliases: [site.example.invalid, api.example.invalid, images.example.invalid]
+  test-runner:
+    build: ./lab
+    profiles: [test]
+    volumes:
+      - ./tests:/tests:ro
+    environment:
+      VARNISH_HOST: varnish
+    command: ["python", "-u", "/tests/integration.py"]

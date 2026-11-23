@@ -3,7 +3,7 @@ vcl 4.1;
 import directors;
 
 # TEMPLATE: replace all example addresses, ports, domains, and paths.
-# These values do not describe your infrastructure and are not production-ready.
+# Docker Compose service names below are for the lab and are not production-ready.
 # Naming convention: backend_<role>_<number> and pool_<role>.
 
 # 1. BACKENDS: define one block for each server or instance.
@@ -18,7 +18,7 @@ import directors;
 # }
 
 backend backend_site_01 {
-    .host = "127.0.0.1";       # Replace with the origin IP or DNS name.
+    .host = "site-01";       # Replace with the origin IP or DNS name.
     .port = "8080";            # Origin port; must differ from the Varnish listener.
     .max_connections = 300;     # Adjust to the origin capacity.
     .connect_timeout = 5s;
@@ -27,7 +27,7 @@ backend backend_site_01 {
     # .probe = probe_padrao;     # Enable after configuring /health.
 }
 backend backend_site_02 {
-    .host = "127.0.0.1";
+    .host = "site-02";
     .port = "8081";
     .max_connections = 300;
     .connect_timeout = 5s;
@@ -36,7 +36,7 @@ backend backend_site_02 {
     # .probe = probe_padrao;
 }
 backend backend_api_01 {
-    .host = "127.0.0.1";
+    .host = "api-01";
     .port = "8082";
     .max_connections = 300;
     .connect_timeout = 5s;
@@ -45,7 +45,7 @@ backend backend_api_01 {
     # .probe = probe_padrao;
 }
 backend backend_imagens_01 {
-    .host = "127.0.0.1";
+    .host = "images-01";
     .port = "8083";
     .max_connections = 300;
     .connect_timeout = 5s;
@@ -83,11 +83,11 @@ sub request_route {
     # 4. ROUTING: replace the fictional reserved .invalid domains.
     # Order matters: API and images are evaluated before the default.
     set req.backend_hint = pool_site.backend();
-    if (req.http.host ~ "(?i)^api[.]exemplo[.]invalid(:[0-9]+)?$" ||
-        (req.http.host ~ "(?i)^site[.]exemplo[.]invalid(:[0-9]+)?$" &&
+    if (req.http.host ~ "(?i)^api[.]example[.]invalid(:[0-9]+)?$" ||
+        (req.http.host ~ "(?i)^site[.]example[.]invalid(:[0-9]+)?$" &&
          req.url ~ "^/api/")) {
         set req.backend_hint = pool_api.backend();
-    } elseif (req.http.host ~ "(?i)^imagens[.]exemplo[.]invalid(:[0-9]+)?$") {
+    } elseif (req.http.host ~ "(?i)^images[.]example[.]invalid(:[0-9]+)?$") {
         set req.backend_hint = pool_imagens.backend();
     }
     # Example of routing by domain and path, as in the original CDN:

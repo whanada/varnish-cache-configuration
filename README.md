@@ -35,7 +35,7 @@ The diagram is a simplified view: pass responses are not stored, and backend err
 4. Optionally enable the probe after confirming its URL returns HTTP 200 on each origin. Set an appropriate Host in a custom probe request if the origin requires one.
 5. Compile before loading: `varnishd -C -f merged.vcl`. Run Varnish in a test environment, verify the routes and cache behavior, then load it using your service's normal deployment process.
 
-The sample ports `8080`–`8083`, timeouts and connection limits are examples; tune them with measurements and the origin's capacity. TLS termination and listener settings are outside this VCL.
+The Compose service names and ports `8080`–`8083`, timeouts and connection limits are examples; tune them with measurements and the origin's capacity. TLS termination and listener settings are outside this VCL.
 
 ## How the pieces work
 
@@ -140,3 +140,43 @@ Use `varnishd -C -f merged.vcl` with the exact installed release, and test routi
 - [Varnish User Guide: VCL](https://varnish-cache.org/docs/trunk/users-guide/vcl.html)
 - [VCL reference](https://varnish-cache.org/docs/trunk/reference/vcl.html)
 - [Varnish documentation index](https://varnish-cache.org/docs/)
+
+## Docker integration lab
+
+The lab runs Varnish 7.7.3 with four Python mock origins and an isolated test runner. Docker Compose DNS resolves the backend service names; reserved `.invalid` hostnames are network aliases for Varnish and are routed by the HTTP `Host` header. No external DNS is required. The origin failure controls are deliberately unauthenticated and may also be reached through Varnish: bind the lab only to a trusted local environment; this is not a production service.
+
+```mermaid
+flowchart TD
+    Client[Client :6081] --> V[Varnish]
+    V --> Route{Host and path}
+    Route -->|site| Site[Site round robin]
+    Site --> S1[site-01 :8080]
+    Site --> S2[site-02 :8081]
+    Route -->|API host or site /api/| API[api-01 :8082]
+    Route -->|images host| Images[images-01 :8083]
+    Tests[Test runner] --> V
+    Tests -. failure injection .-> API
+```
+
+Prerequisites: Docker Engine with Compose v2 or later, access to the Docker daemon, and the ability to pull the pinned images. From a clean checkout:
+
+```sh
+docker compose up -d --build
+docker compose ps
+docker compose exec varnish varnishstat -1
+```
+
+Run the full validation with `./lab/validate.sh`. This checks Compose, builds and starts the lab, compiles the VCL, waits for readiness, and runs the tests; it leaves the lab running for inspection. Clean up with `docker compose down --volumes --remove-orphans`. GitHub Actions performs the same checks and always tears the lab down, collecting container logs on failure.
+
+```sh
+curl -i -H 'Host: site.example.invalid' http://localhost:6081/public/test.css
+curl -i -H 'Host: site.example.invalid' http://localhost:6081/public/test.css
+curl -i -H 'Host: api.example.invalid' http://localhost:6081/api/example
+curl -i -H 'Host: images.example.invalid' http://localhost:6081/public/test.json
+curl -v -H 'Host: site.example.invalid' http://localhost:6081/esi
+curl -s -o /dev/null -w 'total: %{time_total}s\n' -H 'Host: site.example.invalid' http://localhost:6081/health
+```
+
+Inspect cache hits, fetch failures and backend selection with `docker compose exec varnish varnishstat -1`, `docker compose exec varnish varnishlog -g request`, and `docker compose exec varnish varnishadm backend.list`. The admin interface is not published on the host. `Age`, origin headers, `X-Cache`, and `varnishlog` help diagnose expiration and stale responses. The header `X-Cache: MISS` is based on object hits and also includes pass and hit-for-pass traffic; use Varnish logs to distinguish those paths. `Via` is version-dependent and is inspected as an optional header in diagnostics.
+
+The test suite checks routing and origin counts, cache isolation by host and query, Vary, cookie and authorization isolation, blocked invalidation, ESI inclusion, expiry, stale delivery during injected failure, and site-pool distribution using unique URLs. Test TTLs are intentionally short. Backend hostnames resolve when VCL loads; after recreating an origin, recreate Varnish (`docker compose up -d --force-recreate --no-deps varnish`) to refresh addresses. Failure injection returns 503 rather than stopping the container; it does not prove every transport-failure scenario. This is an educational lab, not a security or performance certification.
